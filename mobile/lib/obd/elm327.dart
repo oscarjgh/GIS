@@ -21,6 +21,15 @@ class Elm327 {
   String version = '';
   final Set<String> _unsupported = {};
 
+  /// PIDs que la computadora del carro dice soportar (vacío = no se pudo saber).
+  Set<String> supported = {};
+
+  /// Nombres de los datos que este carro sí entrega (rpm, coolantTemp…).
+  List<String> get availableKeys => standardPids
+      .where((p) => !_unsupported.contains(p.pid) && (supported.isEmpty || supported.contains(p.pid)))
+      .map((p) => p.key)
+      .toList();
+
   void _onData(String chunk) {
     _buffer.write(chunk);
     // El ELM327 termina cada respuesta con el prompt ">".
@@ -62,6 +71,24 @@ class Elm327 {
     protocol = dp;
     final number = dp.replaceFirst('A', '');
     isCan = ['6', '7', '8', '9'].contains(number);
+    await detectSupportedPids(probe);
+  }
+
+  /// Pregunta al carro qué datos soporta, para leer solo esos (más rápido y sin errores).
+  Future<void> detectSupportedPids([String? first0100]) async {
+    final found = <String>{};
+    var base = 0x00;
+    var raw = first0100 ?? await send('0100');
+    while (true) {
+      final chunk = parseSupportedPids(raw, base);
+      found.addAll(chunk);
+      final next = base + 0x20;
+      // El último bit de cada bloque indica si hay un bloque siguiente (0120, 0140…).
+      if (next > 0x60 || !chunk.contains(next.toRadixString(16).padLeft(2, '0').toUpperCase())) break;
+      base = next;
+      raw = await send('01${base.toRadixString(16).padLeft(2, '0').toUpperCase()}');
+    }
+    supported = found;
   }
 
   /// Lee todos los PIDs soportados. Los que responden "NO DATA" se dejan de pedir.
@@ -69,6 +96,7 @@ class Elm327 {
     final values = <String, double>{};
     for (final spec in standardPids) {
       if (_unsupported.contains(spec.pid)) continue;
+      if (supported.isNotEmpty && !supported.contains(spec.pid)) continue;
       final raw = await send('01${spec.pid}');
       if (raw == 'TIMEOUT') continue;
       final bytes = parseMode01(raw, spec.pid);

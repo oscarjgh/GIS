@@ -3,6 +3,7 @@ import { CircleMarker, MapContainer, Popup, TileLayer, Tooltip, useMap } from 'r
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { ObdPanel } from '../components/ObdPanel';
+import { SourceIcons } from '../components/SourceIcons';
 import { StatusBadge } from '../components/StatusBadge';
 import { timeAgo, useApi, useRealtime, vehicleStatus } from '../hooks';
 import { Alert, Vehicle } from '../types';
@@ -65,7 +66,9 @@ export function MapPage() {
             onClick={() => v.lastState?.lat !== undefined && setFocus([v.lastState.lat, v.lastState.lng!])}
           >
             <div className="row-between">
-              <strong>{v.name}</strong>
+              <strong>
+                {v.name} <SourceIcons vehicle={v} />
+              </strong>
               <StatusBadge state={v.lastState} />
             </div>
             <div className="muted small">
@@ -96,6 +99,9 @@ export function MapPage() {
                   <strong>{v.name}</strong> {v.plate && <span className="muted">({v.plate})</span>}
                   <div>
                     {s.label} · {Math.round(v.lastState?.speed ?? 0)} km/h · {timeAgo(v.lastState?.time)}
+                  </div>
+                  <div>
+                    <SourceIcons vehicle={v} />
                   </div>
                   <ObdPanel obd={v.lastState?.obd} />
                   <Link to={`/vehicles/${v.id}`}>Ver detalle, recorrido y fallas →</Link>

@@ -26,6 +26,16 @@ export interface VehicleState {
   source?: string;
   obd?: Record<string, number>;
   activeDtcs?: string[];
+  positionSource?: string;
+  sources?: Partial<Record<DataSource, string>>;
+}
+
+export type DataSource = 'gps' | 'phone' | 'scanner';
+
+export interface SourceStatus {
+  registered: boolean;
+  active: boolean;
+  lastSeen: string | null;
 }
 
 export interface Vehicle {
@@ -39,6 +49,7 @@ export interface Vehicle {
   speedLimit: number;
   odometerKm: number;
   lastState: VehicleState | null;
+  sources?: Record<DataSource, SourceStatus>;
 }
 
 export type DeviceProtocol = 'mobile' | 'tk103_coban' | 'tk103_xexun' | 'traccar';

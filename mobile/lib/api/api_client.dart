@@ -80,6 +80,13 @@ class ApiClient {
     return list.map((e) => Vehicle.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  /// Qué más tiene el vehículo (GPS físico) y cómo recomienda el servidor que trabaje la app.
+  Future<Map<String, dynamic>> mobileConfig() async {
+    final uri = Uri.parse('$serverUrl/api/ingest/mobile/config').replace(queryParameters: {'vehicleId': vehicleId});
+    final res = await http.get(uri, headers: _headers()).timeout(const Duration(seconds: 10));
+    return _decode(res) as Map<String, dynamic>;
+  }
+
   /// Envía un lote de eventos. Lanza excepción si falla (para reintentar después).
   Future<void> sendBatch(List<Map<String, dynamic>> events) async {
     final res = await http

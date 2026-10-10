@@ -119,3 +119,23 @@ double? parseVoltage(String raw) {
   final m = RegExp(r'(\d+(\.\d+)?)V').firstMatch(raw.toUpperCase());
   return m == null ? null : double.tryParse(m.group(1)!);
 }
+
+/// Decodifica la máscara de PIDs soportados (respuestas a 0100, 0120, 0140…).
+/// Ej. "4100BE1FA813" con base 0x00 -> {01, 03, 04, 05, 06, 07, 0C, 0D, …}.
+/// Si responden varias ECU se combinan sus máscaras.
+Set<String> parseSupportedPids(String raw, int base) {
+  final prefix = '41${base.toRadixString(16).padLeft(2, '0').toUpperCase()}';
+  final supported = <String>{};
+  for (final line in cleanLines(raw)) {
+    final idx = line.indexOf(prefix);
+    if (idx < 0 || line.length < idx + prefix.length + 8) continue;
+    final mask = int.tryParse(line.substring(idx + prefix.length, idx + prefix.length + 8), radix: 16);
+    if (mask == null) continue;
+    for (var i = 0; i < 32; i++) {
+      if (mask & (1 << (31 - i)) != 0) {
+        supported.add((base + i + 1).toRadixString(16).padLeft(2, '0').toUpperCase());
+      }
+    }
+  }
+  return supported;
+}

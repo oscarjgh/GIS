@@ -7,6 +7,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../api/api_client.dart';
 import '../obd/elm327.dart';
 import '../obd/elm327_transport.dart';
+import '../obd/obd_discovery.dart';
 import 'offline_queue.dart';
 
 /// Corazón de la app: junta GPS + OBD2 cada cierto tiempo, lo encola y lo envía.
@@ -29,6 +30,22 @@ class TrackingService extends ChangeNotifier {
   Duration dtcEvery = const Duration(minutes: 2);
   Duration flushEvery = const Duration(seconds: 15);
 
+  // ------------------------------------------------ Detección automática
+  /// Lo que el servidor sabe del vehículo (GPS físico) y su recomendación.
+  bool hardwareGpsRegistered = false;
+  bool hardwareGpsActive = false;
+  /// 'full' = el celular manda ubicación siempre; 'backup' = solo de respaldo (hay GPS físico).
+  String locationMode = 'full';
+  Duration locationEvery = const Duration(seconds: 10);
+  String planReason = '';
+  bool phoneGpsAvailable = false;
+  bool detecting = false;
+  /// Si el chofer desconectó el escáner a mano, la detección automática no lo reconecta.
+  bool obdManuallyDisconnected = false;
+  String? detectStep;
+  DateTime? _lastLocationQueued;
+  Timer? _redetectTimer;
+
   StreamSubscription<Position>? _gps;
   Timer? _sampleTimer;
   Timer? _flushTimer;
@@ -47,6 +64,7 @@ class TrackingService extends ChangeNotifier {
     try {
       await client.initialize();
       elm = client;
+      obdManuallyDisconnected = false;
       lastError = null;
     } catch (e) {
       await client.close();
@@ -57,7 +75,8 @@ class TrackingService extends ChangeNotifier {
     }
   }
 
-  Future<void> disconnectObd() async {
+  Future<void> disconnectObd({bool manual = false}) async {
+    if (manual) obdManuallyDisconnected = true;
     await elm?.close();
     elm = null;
     notifyListeners();
@@ -81,11 +100,110 @@ class TrackingService extends ChangeNotifier {
     return ok;
   }
 
+  // ------------------------------------------------- Autoconfiguración
+
+  /// Detecta qué hay a la mano (GPS físico del vehículo, GPS del celular, escáner)
+  /// y configura la app para leer solo eso. Se repite cada 2 minutos.
+  Future<void> autoSetup() async {
+    if (detecting) return;
+    detecting = true;
+    notifyListeners();
+    try {
+      detectStep = 'Consultando el vehículo en el servidor…';
+      notifyListeners();
+      await _refreshPlan();
+
+      if (!tracking) {
+        detectStep = 'Activando GPS del celular…';
+        notifyListeners();
+        await start();
+      } else if (_gps == null) {
+        // Quizá el chofer encendió la ubicación después: se reintenta sin volver a pedir permiso.
+        await _retryGpsSilently();
+      }
+
+      if (!obdConnected && !obdManuallyDisconnected) {
+        final found = await ObdDiscovery.autoConnect(onStep: (step) {
+          detectStep = step;
+          notifyListeners();
+        });
+        if (found != null) {
+          await elm?.close();
+          elm = found;
+        }
+      }
+    } finally {
+      detecting = false;
+      detectStep = null;
+      _redetectTimer ??= Timer.periodic(const Duration(minutes: 2), (_) => autoSetup());
+      notifyListeners();
+    }
+  }
+
+  Future<void> _refreshPlan() async {
+    try {
+      final cfg = await api.mobileConfig();
+      final gps = (cfg['sources'] as Map)['gps'] as Map;
+      final plan = cfg['plan'] as Map;
+      hardwareGpsRegistered = gps['registered'] == true;
+      hardwareGpsActive = gps['active'] == true;
+      locationMode = plan['location'] as String;
+      locationEvery = Duration(seconds: (plan['locationEverySec'] as num).toInt());
+      planReason = plan['reason'] as String;
+      final newSample = Duration(seconds: (plan['sampleEverySec'] as num).toInt());
+      dtcEvery = Duration(seconds: (plan['dtcEverySec'] as num).toInt());
+      if (newSample != sampleEvery) {
+        sampleEvery = newSample;
+        if (tracking) {
+          _sampleTimer?.cancel();
+          _sampleTimer = Timer.periodic(sampleEvery, (_) => _sample());
+        }
+      }
+    } catch (_) {
+      // Sin conexión: se conserva el último plan (por defecto el celular manda ubicación).
+    }
+  }
+
+  Future<void> _retryGpsSilently() async {
+    final perm = await Geolocator.checkPermission();
+    if (await Geolocator.isLocationServiceEnabled() &&
+        (perm == LocationPermission.always || perm == LocationPermission.whileInUse)) {
+      _startGps();
+    }
+  }
+
+  /// Resumen en palabras de cómo está trabajando la app.
+  String get modeDescription {
+    final scanner = obdConnected;
+    if (hardwareGpsActive && scanner) return 'GPS del vehículo + escáner: el celular solo lee el motor.';
+    if (hardwareGpsActive) return 'El GPS del vehículo da la ubicación; el celular queda de respaldo.';
+    if (phoneGpsAvailable && scanner) return 'Celular como GPS + escáner leyendo el motor.';
+    if (phoneGpsAvailable) return 'Solo celular: se envía la ubicación (sin datos del motor).';
+    if (scanner) return 'Solo escáner: se envían datos del motor sin ubicación.';
+    return 'Nada disponible todavía.';
+  }
+
   // ------------------------------------------------------------- Rastreo
 
+  /// Arranca el envío. Si el GPS del celular no está disponible (apagado o sin
+  /// permiso) sigue trabajando solo con el escáner.
   Future<void> start() async {
     if (tracking) return;
-    await _ensureLocationPermission();
+    try {
+      await _ensureLocationPermission();
+      _startGps();
+    } catch (e) {
+      phoneGpsAvailable = false;
+      lastError = '$e (se sigue enviando lo demás)';
+    }
+    _sampleTimer = Timer.periodic(sampleEvery, (_) => _sample());
+    _flushTimer = Timer.periodic(flushEvery, (_) => flush());
+    tracking = true;
+    WakelockPlus.enable();
+    notifyListeners();
+  }
+
+  void _startGps() {
     final settings = defaultTargetPlatform == TargetPlatform.android
         ? AndroidSettings(
             accuracy: LocationAccuracy.high,
@@ -106,20 +224,21 @@ class TrackingService extends ChangeNotifier {
           );
     _gps = Geolocator.getPositionStream(locationSettings: settings).listen((p) {
       lastPosition = p;
+      phoneGpsAvailable = true;
       notifyListeners();
     }, onError: (e) {
+      phoneGpsAvailable = false;
       lastError = 'GPS: $e';
       notifyListeners();
     });
-    _sampleTimer = Timer.periodic(sampleEvery, (_) => _sample());
-    _flushTimer = Timer.periodic(flushEvery, (_) => flush());
-    tracking = true;
-    WakelockPlus.enable();
-    notifyListeners();
   }
 
   Future<void> stop() async {
+    _redetectTimer?.cancel();
+    _redetectTimer = null;
+    phoneGpsAvailable = false;
     await _gps?.cancel();
+    _gps = null;
     _sampleTimer?.cancel();
     _flushTimer?.cancel();
     tracking = false;
@@ -158,7 +277,13 @@ class TrackingService extends ChangeNotifier {
   }
 
   Future<void> _enqueue({List<String>? dtcsOverride}) async {
-    final p = lastPosition;
+    // Con GPS físico activo, la ubicación del celular solo se manda de vez en cuando (respaldo).
+    final now = DateTime.now();
+    final locationDue = locationMode == 'full' ||
+        _lastLocationQueued == null ||
+        now.difference(_lastLocationQueued!) >= locationEvery;
+    final p = locationDue ? lastPosition : null;
+    if (p != null) _lastLocationQueued = now;
     final hasObd = elm?.connected == true && obd.isNotEmpty;
     if (p == null && !hasObd && dtcsOverride == null) return;
     final event = <String, dynamic>{

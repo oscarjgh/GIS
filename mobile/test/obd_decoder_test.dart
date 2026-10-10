@@ -27,4 +27,16 @@ void main() {
   test('voltaje ATRV', () {
     expect(parseVoltage('12.6V\r>'), 12.6);
   });
+
+  test('PIDs soportados (máscara 0100)', () {
+    final pids = parseSupportedPids('4100BE1FA813\r>', 0x00);
+    expect(pids.containsAll(['01', '03', '04', '05', '06', '07', '0C', '0D', '0F', '10', '11', '20']), isTrue);
+    expect(pids.contains('02'), isFalse);
+    expect(pids.contains('0A'), isFalse);
+  });
+
+  test('PIDs soportados de dos ECU se combinan', () {
+    final pids = parseSupportedPids('4120800000000\r412000000001\r>', 0x20);
+    expect(pids, containsAll(['21', '40']));
+  });
 }

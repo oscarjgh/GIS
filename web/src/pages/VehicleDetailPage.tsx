@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { CircleMarker, MapContainer, Polyline, TileLayer, Tooltip } from 'react-leaflet';
 import { Link, useParams } from 'react-router-dom';
 import { ObdPanel } from '../components/ObdPanel';
+import { SourcesCard } from '../components/SourceIcons';
 import { StatusBadge } from '../components/StatusBadge';
 import { timeAgo, useApi } from '../hooks';
 import { Alert, Device, Position, PROTOCOL_LABELS, Vehicle } from '../types';
@@ -47,6 +48,8 @@ export function VehicleDetailPage() {
         {timeAgo(v.lastState?.time)} · Dispositivos:{' '}
         {v.devices.map((d) => `${d.name ?? d.uniqueId} (${PROTOCOL_LABELS[d.protocol]})`).join(', ') || 'ninguno'}
       </p>
+
+      <SourcesCard vehicle={v} />
 
       <div className="grid-2">
         <section className="card">

@@ -19,12 +19,29 @@ const _labels = <String, (String, String)>{
   'runtimeSec': ('Encendido', 's'),
 };
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.api, required this.tracking, required this.onChangeVehicle, required this.onLogout});
   final ApiClient api;
   final TrackingService tracking;
   final VoidCallback onChangeVehicle;
   final VoidCallback onLogout;
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  ApiClient get api => widget.api;
+  TrackingService get tracking => widget.tracking;
+  VoidCallback get onChangeVehicle => widget.onChangeVehicle;
+  VoidCallback get onLogout => widget.onLogout;
+
+  @override
+  void initState() {
+    super.initState();
+    // Al abrir: detectar qué hay a la mano y configurarse solo.
+    WidgetsBinding.instance.addPostFrameCallback((_) => tracking.autoSetup());
+  }
 
   void _snack(BuildContext context, String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
@@ -83,6 +100,8 @@ class HomeScreen extends StatelessWidget {
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              _DetectionCard(tracking: tracking),
+              const SizedBox(height: 8),
               Card(
                 child: ListTile(
                   leading: Icon(tracking.tracking ? Icons.gps_fixed : Icons.gps_off, color: tracking.tracking ? Colors.green : Colors.grey),
@@ -101,7 +120,7 @@ class HomeScreen extends StatelessWidget {
                 style: FilledButton.styleFrom(backgroundColor: tracking.tracking ? Colors.red : null, minimumSize: const Size.fromHeight(48)),
                 onPressed: () async {
                   try {
-                    tracking.tracking ? await tracking.stop() : await tracking.start();
+                    tracking.tracking ? await tracking.stop() : await tracking.autoSetup();
                   } catch (e) {
                     if (context.mounted) _snack(context, '$e');
                   }
@@ -124,7 +143,7 @@ class HomeScreen extends StatelessWidget {
                   OutlinedButton.icon(icon: const Icon(Icons.wifi), label: const Text('ELM327 WiFi'), onPressed: () => _connect(context, () => WifiTransport.connect())),
                 ])
               else
-                TextButton(onPressed: tracking.disconnectObd, child: const Text('Desconectar escáner')),
+                TextButton(onPressed: () => tracking.disconnectObd(manual: true), child: const Text('Desconectar escáner')),
               if (tracking.obd.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 GridView.count(
@@ -194,6 +213,80 @@ class HomeScreen extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Muestra lo que la app detectó y cómo decidió trabajar.
+class _DetectionCard extends StatelessWidget {
+  const _DetectionCard({required this.tracking});
+  final TrackingService tracking;
+
+  Widget _row(BuildContext context, IconData icon, String label, bool ok, String detail) {
+    return ListTile(
+      dense: true,
+      leading: Icon(icon, color: ok ? Colors.green : Colors.grey),
+      title: Text(label),
+      subtitle: Text(detail),
+      trailing: Icon(ok ? Icons.check_circle : Icons.remove_circle_outline, color: ok ? Colors.green : Colors.grey),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = tracking;
+    final keys = t.elm?.availableKeys ?? const <String>[];
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          ListTile(
+            title: const Text('Detección automática'),
+            subtitle: Text(t.detecting ? (t.detectStep ?? 'Detectando…') : t.modeDescription),
+            trailing: t.detecting
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                : IconButton(icon: const Icon(Icons.refresh), tooltip: 'Volver a detectar', onPressed: t.autoSetup),
+          ),
+          _row(
+            context,
+            Icons.satellite_alt,
+            'GPS del vehículo',
+            t.hardwareGpsActive,
+            t.hardwareGpsActive
+                ? 'Reportando: da la ubicación'
+                : t.hardwareGpsRegistered
+                    ? 'Instalado pero sin reportar'
+                    : 'No tiene',
+          ),
+          _row(
+            context,
+            Icons.smartphone,
+            'GPS del celular',
+            t.phoneGpsAvailable,
+            !t.phoneGpsAvailable
+                ? 'No disponible (ubicación apagada o sin permiso)'
+                : t.locationMode == 'backup'
+                    ? 'Respaldo: cada ${t.locationEvery.inSeconds} s'
+                    : 'Fuente principal de ubicación',
+          ),
+          _row(
+            context,
+            Icons.car_repair,
+            'Escáner OBD2',
+            t.obdConnected,
+            t.obdConnected
+                ? 'Lee ${keys.length} datos: ${keys.map((k) => _labels[k]?.$1 ?? k).join(', ')}'
+                : t.obdManuallyDisconnected
+                    ? 'Desconectado a mano'
+                    : 'No encontrado (empareja el ELM327 o conéctate a su WiFi)',
+          ),
+          if (t.planReason.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: Text(t.planReason, style: Theme.of(context).textTheme.bodySmall),
+            ),
+        ]),
+      ),
     );
   }
 }

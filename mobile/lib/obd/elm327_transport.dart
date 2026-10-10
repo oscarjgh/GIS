@@ -59,8 +59,12 @@ class WifiTransport implements Elm327Transport {
   @override
   final String description;
 
-  static Future<WifiTransport> connect({String host = '192.168.0.10', int port = 35000}) async {
-    final socket = await Socket.connect(host, port, timeout: const Duration(seconds: 5));
+  static Future<WifiTransport> connect({
+    String host = '192.168.0.10',
+    int port = 35000,
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    final socket = await Socket.connect(host, port, timeout: timeout);
     return WifiTransport._(socket, 'WiFi $host:$port');
   }
 

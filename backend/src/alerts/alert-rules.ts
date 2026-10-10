@@ -7,6 +7,11 @@ export const COOLANT_LIMIT_C = 105;
 export const LOW_VOLTAGE_V = 11.8;
 /** Saltos mayores se consideran error de GPS y no suman al odómetro. */
 const MAX_ODOMETER_JUMP_M = 10000;
+/**
+ * Mientras el GPS físico haya reportado hace menos de esto, su posición manda y
+ * la del celular solo se guarda en el historial (evita que el punto "brinque").
+ */
+export const HARDWARE_GPS_PRIORITY_MS = 2 * 60 * 1000;
 
 export interface AlertDraft {
   type: AlertType;
@@ -66,11 +71,25 @@ export function evaluateEvent(prev: VehicleState | null, event: NormalizedEvent,
     return { state: null, alerts, dtcChanges: [], distanceKm: 0 };
   }
 
-  const state: VehicleState = { ...(prev ?? {}), time: event.time.toISOString(), source: event.source };
-  const positioned = hasPosition(event) && event.valid !== false;
+  const iso = event.time.toISOString();
+  const state: VehicleState = { ...(prev ?? {}), time: iso, source: event.source };
+
+  // Registro de qué fuentes están reportando para este vehículo.
+  const sources = { ...(prev?.sources ?? {}) };
+  if (event.source === 'mobile') {
+    if (hasPosition(event)) sources.phone = iso;
+  } else {
+    sources.gps = iso;
+  }
+  if (event.obd && Object.keys(event.obd).length) sources.scanner = iso;
+  state.sources = sources;
+
+  const positioned = hasPosition(event) && event.valid !== false && !shadowedByHardwareGps(prev, event);
   let distanceKm = 0;
 
   if (positioned) {
+    state.positionSource = event.source;
+    state.positionTime = iso;
     if (prev?.lat !== undefined && prev.lng !== undefined) {
       const d = distanceMeters(prev.lat, prev.lng, event.lat!, event.lng!);
       if (d < MAX_ODOMETER_JUMP_M) distanceKm = d / 1000;
@@ -80,7 +99,8 @@ export function evaluateEvent(prev: VehicleState | null, event: NormalizedEvent,
     if (event.course !== undefined) state.course = event.course;
   }
 
-  const speed = event.speed ?? event.obd?.speed;
+  // La velocidad del OBD es la más exacta; si no, la de la fuente de posición aceptada.
+  const speed = event.obd?.speed ?? (positioned || !hasPosition(event) ? event.speed : undefined);
   if (speed !== undefined) {
     if (speed > ctx.speedLimit && (prev?.speed ?? 0) <= ctx.speedLimit) {
       alerts.push({
@@ -158,4 +178,12 @@ export function evaluateEvent(prev: VehicleState | null, event: NormalizedEvent,
   }
 
   return { state, alerts, dtcChanges, distanceKm };
+}
+
+/** true si el evento es del celular y hay un GPS físico reportando: su posición no se usa para el estado. */
+export function shadowedByHardwareGps(prev: VehicleState | null, event: NormalizedEvent): boolean {
+  if (event.source !== 'mobile' || !prev?.positionSource || prev.positionSource === 'mobile' || !prev.positionTime) {
+    return false;
+  }
+  return event.time.getTime() - new Date(prev.positionTime).getTime() < HARDWARE_GPS_PRIORITY_MS;
 }

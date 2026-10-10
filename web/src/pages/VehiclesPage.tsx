@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { FormCard, useTenantBody } from '../components/Form';
+import { SourceIcons } from '../components/SourceIcons';
 import { StatusBadge } from '../components/StatusBadge';
 import { timeAgo, useApi } from '../hooks';
 import { Vehicle } from '../types';
@@ -47,6 +48,7 @@ export function VehiclesPage() {
             <th>Nombre</th>
             <th>Placas</th>
             <th>Vehículo</th>
+            <th>Fuentes</th>
             <th>Estado</th>
             <th>Último reporte</th>
             <th>Fallas</th>
@@ -61,6 +63,9 @@ export function VehiclesPage() {
               </td>
               <td>{v.plate}</td>
               <td>{[v.brand, v.model, v.year].filter(Boolean).join(' ')}</td>
+              <td>
+                <SourceIcons vehicle={v} />
+              </td>
               <td>
                 <StatusBadge state={v.lastState} />
               </td>

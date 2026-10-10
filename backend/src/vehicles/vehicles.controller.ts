@@ -14,6 +14,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { Repository } from 'typeorm';
 import { AuthUser, CurrentUser, resolveTenant, Roles, tenantFilter } from '../common/auth-user';
+import { vehicleSources } from '../common/sources';
 import { Device, Role, Vehicle } from '../entities';
 
 class VehicleDto {
@@ -37,16 +38,23 @@ export class VehiclesController {
 
   /** Lista de vehículos con su último estado: es lo que pinta el mapa al cargar. */
   @Get()
-  list(@CurrentUser() user: AuthUser, @Query('tenantId') tenantId?: string) {
+  async list(@CurrentUser() user: AuthUser, @Query('tenantId') tenantId?: string) {
     const t = tenantFilter(user, tenantId);
-    return this.vehicles.find({ where: t ? { tenantId: t } : {}, order: { name: 'ASC' } });
+    const vehicles = await this.vehicles.find({ where: t ? { tenantId: t } : {}, order: { name: 'ASC' } });
+    const devices = vehicles.length
+      ? await this.devices.createQueryBuilder('d').where('d.vehicleId IN (:...ids)', { ids: vehicles.map((v) => v.id) }).getMany()
+      : [];
+    return vehicles.map((v) => ({
+      ...v,
+      sources: vehicleSources(devices.filter((d) => d.vehicleId === v.id), v.lastState),
+    }));
   }
 
   @Get(':id')
   async get(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     const vehicle = await this.find(user, id);
     const devices = await this.devices.findBy({ vehicleId: id });
-    return { ...vehicle, devices };
+    return { ...vehicle, devices, sources: vehicleSources(devices, vehicle.lastState) };
   }
 
   @Post()

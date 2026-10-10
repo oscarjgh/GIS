@@ -12,7 +12,14 @@ export interface VehicleState {
   obd?: Record<string, number>;
   activeDtcs?: string[];
   insideGeofences?: string[];
+  /** Fuente que dio la última posición aceptada y cuándo (para fusionar GPS físico y celular). */
+  positionSource?: string;
+  positionTime?: string;
+  /** Última vez que reportó cada fuente de datos: gps (GPS físico), phone (celular), scanner (ELM327). */
+  sources?: Partial<Record<DataSource, string>>;
 }
+
+export type DataSource = 'gps' | 'phone' | 'scanner';
 
 @Entity('vehicles')
 export class Vehicle {

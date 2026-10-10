@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Type } from 'class-transformer';
 import {
@@ -16,6 +16,7 @@ import {
 } from 'class-validator';
 import { Repository } from 'typeorm';
 import { AuthUser, CurrentUser, resolveTenant } from '../common/auth-user';
+import { mobilePlan, vehicleSources } from '../common/sources';
 import { Device, DeviceProtocol, Vehicle } from '../entities';
 import { IngestService } from './ingest.service';
 import { NormalizedEvent, ObdValues } from './normalized-event';
@@ -61,6 +62,19 @@ export class MobileIngestController {
     @InjectRepository(Device) private readonly devices: Repository<Device>,
     @InjectRepository(Vehicle) private readonly vehicles: Repository<Vehicle>,
   ) {}
+
+  /**
+   * La app pregunta qué más tiene el vehículo (p. ej. un GPS TK103 activo) para
+   * configurarse sola: si hay GPS físico, el celular no gasta batería en ubicación.
+   */
+  @Get('mobile/config')
+  async config(@CurrentUser() user: AuthUser, @Query('vehicleId', ParseUUIDPipe) vehicleId: string) {
+    const tenantId = resolveTenant(user);
+    const vehicle = await this.vehicles.findOneBy({ id: vehicleId, tenantId });
+    if (!vehicle) throw new BadRequestException('Vehículo no encontrado en tu empresa');
+    const sources = vehicleSources(await this.devices.findBy({ vehicleId }), vehicle.lastState);
+    return { vehicleId, sources, plan: mobilePlan(sources) };
+  }
 
   @Post('mobile')
   async mobile(@CurrentUser() user: AuthUser, @Body() dto: MobileBatchDto) {

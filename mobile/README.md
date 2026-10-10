@@ -35,8 +35,11 @@ App del chofer: lee el escáner **OBD2 ELM327** (Bluetooth o WiFi) y el **GPS de
 
 1. Empareja el ELM327 en *Ajustes > Bluetooth* (PIN `1234` o `0000`). Con el modelo WiFi, conéctate a su red `WiFi_OBDII`.
 2. En la app, inicia sesión con un usuario de rol **Chofer** creado en la web y elige el vehículo.
-3. **Iniciar rastreo** manda la ubicación cada 10 s (sigue funcionando con la pantalla apagada).
-4. **ELM327 Bluetooth/WiFi** conecta el escáner. A partir de ahí se envían RPM, temperatura, voltaje, etc., y cada 2 minutos se leen los códigos de falla.
+3. **Todo lo demás es automático.** La tarjeta *Detección automática* muestra lo que encontró:
+   - **GPS del vehículo**: si tiene un TK103 reportando, el celular solo manda ubicación de respaldo cada 2 min, para ahorrar batería.
+   - **GPS del celular**: si no hay GPS físico, el celular es la fuente de ubicación (cada 10 s, también con la pantalla apagada).
+   - **Escáner OBD2**: lo busca y conecta solo (el último usado, los Bluetooth con nombre de OBD o el WiFi). Lee únicamente los datos que el carro soporta y las fallas cada 2 minutos.
+4. La detección se repite cada 2 minutos. El botón ⟳ la fuerza al instante. Los botones *ELM327 Bluetooth/WiFi* siguen disponibles para conectarlo a mano.
 
 ## Notas sobre el ELM327 chino
 
@@ -52,7 +55,8 @@ lib/
 ├── api/api_client.dart           Login, vehículos, envío de lotes a /api/ingest/mobile
 ├── obd/elm327_transport.dart     Conexión Bluetooth clásico / WiFi
 ├── obd/elm327.dart               Inicialización AT, lectura de PIDs y DTC, borrado
-├── obd/obd_decoder.dart          Decodificación pura de respuestas OBD2
+├── obd/obd_decoder.dart          Decodificación pura de respuestas OBD2 (incluye PIDs soportados)
+├── obd/obd_discovery.dart        Búsqueda y conexión automática del escáner
 ├── tracking/tracking_service.dart  Junta GPS + OBD, encola y envía
 ├── tracking/offline_queue.dart   Cola persistente sin señal
 └── screens/                      Pantallas
