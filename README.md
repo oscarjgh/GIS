@@ -31,7 +31,25 @@ Plataforma para **monitorear vehículos en un mapa** y **diagnosticarlos con el 
 | `web/` | Panel web React + Leaflet/OpenStreetMap: mapa en vivo, recorridos, OBD, fallas, GPS, geocercas |
 | `mobile/` | App Flutter del chofer: ELM327 + GPS del celular, cola sin señal |
 | `gateway/` | Configuración de Traccar para otros protocolos de GPS chinos |
-| `docs/` | [Arquitectura](docs/arquitectura.md) · [GPS TK103](docs/gps-tk103.md) |
+| `docs/` | Documentación (ver abajo) |
+
+## Documentación
+
+| Documento | Para quién |
+|---|---|
+| 📘 [Manual de usuario](docs/manual-usuario.md) | Dueños de flotilla, monitoristas y choferes: cómo usar la web y la app |
+| 🛠️ [Guía de instalación](docs/instalacion.md) | Quien instala: servidor, HTTPS, app móvil, respaldos, problemas comunes |
+| ⚙️ [Documentación técnica](docs/documentacion-tecnica.md) | Desarrolladores: arquitectura, datos, API, cómo extender |
+| 📡 [GPS TK103](docs/gps-tk103.md) | Configurar GPS chinos por SMS, comandos y otros protocolos |
+
+## Instalación en un servidor (un solo comando)
+
+```bash
+git clone https://github.com/oscarjgh/GIS.git flota && cd flota
+sudo bash scripts/instalar.sh
+```
+
+Detalles y la instalación manual en la [guía de instalación](docs/instalacion.md).
 
 ## Arranque rápido (desarrollo)
 
@@ -67,15 +85,15 @@ Usuarios creados por el seed:
 | `operador@demo.local` | `demo123` | Operador / monitorista |
 | `chofer@demo.local` | `demo123` | Chofer (para la app móvil) |
 
-## Producción con Docker
+## Producción con Docker (manual)
 
 ```bash
-cp .env.example .env     # cambia secretos y PUBLIC_HOST
-docker compose up -d --build
+cp .env.example .env     # cambia secretos, PUBLIC_HOST y, para HTTPS, DOMAIN y WEB_PORT=8080
+docker compose --profile https up -d --build   # o sin --profile https si no tienes dominio
 docker compose exec backend node dist/seed.js
 ```
 
-Abre en el firewall: **80** (web), **3000** (API para la app, o publícala detrás de la web con HTTPS) y **5001/TCP** (GPS TK103). Si usas Traccar, abre también 5023/5013/5015/5093.
+Abre en el firewall: **80/443** (web y API) y **5001/TCP** (GPS TK103). Si usas Traccar, abre también 5023/5013/5015/5093.
 
 ## Pruebas
 

@@ -28,7 +28,7 @@
 > `123456` es la contraseña de fábrica. Si la cambiaste, indícala en el parámetro `password` de `/api/devices/:id/setup-sms`. Algunos firmwares cambian ligeramente los comandos; revisa el manual del modelo.
 
 4. En pocos minutos el GPS aparece **● En línea** y se mueve en el mapa.
-   Si no aparece, el super admin puede ver en `GET /api/devices/unknown` los equipos que se conectan sin estar dados de alta. Muchas veces el IMEI registrado está mal escrito.
+   Si no aparece, el super admin puede ver en *GPS / Dispositivos → GPS desconocidos* los equipos que se conectan sin estar dados de alta, y darlos de alta desde ahí con un clic. Muchas veces el IMEI registrado está mal escrito.
 
 ## Comandos remotos (por GPRS)
 

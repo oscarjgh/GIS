@@ -19,8 +19,17 @@ const COMMANDS = [
   { type: 'positionPeriodic', label: '⏱ Reportar cada 30 s' },
 ] as const;
 
+interface UnknownDevice {
+  uniqueId: string;
+  source: string;
+  remoteAddress?: string;
+  lastSeenAt: string;
+}
+
 export function DevicesPage() {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
+  const isSuper = user?.role === 'superadmin';
+  const unknown = useApi<UnknownDevice[]>(isSuper ? '/devices/unknown' : null);
   const withTenant = useTenantBody();
   const devices = useApi<Device[]>('/devices');
   const vehicles = useApi<Vehicle[]>('/vehicles');
@@ -42,6 +51,7 @@ export function DevicesPage() {
     });
     setForm({ ...form, uniqueId: '', name: '', simPhone: '' });
     devices.reload();
+    unknown.reload();
   }
 
   async function assign(d: Device, vehicleId: string) {
@@ -147,6 +157,38 @@ export function DevicesPage() {
             ))}
           </ol>
           <p className="muted">{sms.data.note}</p>
+        </div>
+      )}
+
+      {isSuper && !!unknown.data?.length && (
+        <div className="card">
+          <div className="row-between">
+            <h3>GPS desconocidos (se conectan pero no están dados de alta)</h3>
+            <button className="small secondary" onClick={unknown.reload}>Actualizar</button>
+          </div>
+          <table>
+            <tbody>
+              {unknown.data.map((u) => (
+                <tr key={u.uniqueId}>
+                  <td><strong>{u.uniqueId}</strong></td>
+                  <td>{u.source}</td>
+                  <td className="muted">{u.remoteAddress}</td>
+                  <td>{timeAgo(u.lastSeenAt)}</td>
+                  <td>
+                    <button
+                      className="small"
+                      onClick={() =>
+                        setForm({ ...form, uniqueId: u.uniqueId, protocol: u.source.startsWith('tk103') ? (u.source as DeviceProtocol) : 'traccar' })
+                      }
+                    >
+                      Usar en el alta ↓
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="muted small">El equipo se dará de alta en la empresa seleccionada arriba.</p>
         </div>
       )}
 

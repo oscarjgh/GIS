@@ -1,8 +1,10 @@
 # Plataforma completa: base de datos + API/servidor TK103 + web.
-#   docker compose up -d --build
-#   docker compose exec backend node dist/seed.js --demo
-# Para la etapa 2 con otros GPS chinos (GT06, H02, JT808) vía Traccar:
-#   docker compose --profile traccar up -d
+# Guía paso a paso: docs/instalacion.md (o usa scripts/instalar.sh).
+#
+#   docker compose up -d --build                      # sin HTTPS (web en el puerto 80)
+#   docker compose --profile https up -d --build      # con HTTPS automático (requiere DOMAIN y WEB_PORT=8080 en .env)
+#   docker compose --profile traccar up -d            # además, otros GPS chinos (GT06, H02, JT808) vía Traccar
+#   docker compose exec backend node dist/seed.js     # crea el super administrador
 services:
   db:
     image: postgres:16-alpine
@@ -35,7 +37,8 @@ services:
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@flota.local}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-admin123}
     ports:
-      - '3000:3000'   # API (la app móvil se conecta aquí o vía la web en :80)
+      # La API se publica a través de la web (/api). Este puerto queda solo para el propio servidor.
+      - '127.0.0.1:3000:3000'
       - '5001:5001'   # GPS TK103 (TCP) - abrir en el firewall
 
   web:
@@ -43,7 +46,22 @@ services:
     restart: unless-stopped
     depends_on: [backend]
     ports:
+      # Con HTTPS (perfil "https") pon WEB_PORT=8080 en .env: Caddy ocupa el 80 y el 443.
+      - '${WEB_PORT:-80}:80'
+
+  caddy:
+    image: caddy:2.8-alpine
+    profiles: [https]
+    restart: unless-stopped
+    depends_on: [web]
+    environment:
+      DOMAIN: ${DOMAIN:-}
+    volumes:
+      - ./gateway/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+    ports:
       - '80:80'
+      - '443:443'
 
   traccar:
     image: traccar/traccar:6.5
@@ -66,3 +84,4 @@ services:
 volumes:
   dbdata:
   traccardata:
+  caddydata:

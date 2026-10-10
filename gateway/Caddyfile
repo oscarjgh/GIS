@@ -1,0 +1,6 @@
+# HTTPS automático con Let's Encrypt. Requiere que el dominio (variable DOMAIN)
+# apunte a la IP del servidor y que los puertos 80 y 443 estén abiertos.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy web:80
+}
