@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+*.log
+# Flutter
+mobile/.dart_tool/
+mobile/build/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/.metadata
+mobile/*.iml
+.idea/
+.vscode/

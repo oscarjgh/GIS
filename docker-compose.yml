@@ -1,0 +1,68 @@
+# Plataforma completa: base de datos + API/servidor TK103 + web.
+#   docker compose up -d --build
+#   docker compose exec backend node dist/seed.js --demo
+# Para la etapa 2 con otros GPS chinos (GT06, H02, JT808) vía Traccar:
+#   docker compose --profile traccar up -d
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: flota
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-flota}
+      POSTGRES_DB: flota
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U flota']
+      interval: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://flota:${DB_PASSWORD:-flota}@db:5432/flota
+      DB_SYNC: 'true'
+      JWT_SECRET: ${JWT_SECRET:-cambia-este-secreto}
+      PUBLIC_HOST: ${PUBLIC_HOST:-mi-servidor.com}
+      DEFAULT_APN: ${DEFAULT_APN:-internet.itelcel.com}
+      TK103_PORT: 5001
+      TRACCAR_FORWARD_TOKEN: ${TRACCAR_FORWARD_TOKEN:-}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@flota.local}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-admin123}
+    ports:
+      - '3000:3000'   # API (la app móvil se conecta aquí o vía la web en :80)
+      - '5001:5001'   # GPS TK103 (TCP) - abrir en el firewall
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    depends_on: [backend]
+    ports:
+      - '80:80'
+
+  traccar:
+    image: traccar/traccar:6.5
+    profiles: [traccar]
+    restart: unless-stopped
+    depends_on: [backend]
+    environment:
+      # Traccar lee claves de configuración desde variables de entorno (forward.url -> FORWARD_URL).
+      CONFIG_USE_ENVIRONMENT_VARIABLES: 'true'
+      FORWARD_URL: http://backend:3000/api/ingest/traccar?token=${TRACCAR_FORWARD_TOKEN:-}
+    volumes:
+      - ./gateway/traccar.xml:/opt/traccar/conf/traccar.xml:ro
+      - traccardata:/opt/traccar/data
+    ports:
+      - '5023:5023'   # GT06 / Concox / Jimi
+      - '5013:5013'   # H02 / Sinotrack
+      - '5015:5015'   # JT808
+      - '5093:5093'   # Relojes / GPS personales (watch)
+
+volumes:
+  dbdata:
+  traccardata:

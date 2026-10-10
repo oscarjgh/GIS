@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE properties SYSTEM 'http://java.sun.com/dtd/properties.dtd'>
+<!--
+  Traccar como "traductor" de protocolos para GPS chinos que no son TK103
+  (GT06/Concox, H02/Sinotrack, JT808...). Cada posición se reenvía a la
+  plataforma, que la asigna al cliente por IMEI. La web de Traccar no se expone.
+-->
+<properties>
+    <entry key='database.driver'>org.h2.Driver</entry>
+    <entry key='database.url'>jdbc:h2:./data/database</entry>
+    <entry key='database.user'>sa</entry>
+    <entry key='database.password'></entry>
+
+    <!-- Acepta cualquier equipo: la plataforma decide si está dado de alta. -->
+    <entry key='database.registerUnknown'>true</entry>
+
+    <!-- Reenvío de posiciones a nuestra API. La URL (con el token) llega por la
+         variable FORWARD_URL definida en docker-compose.yml. -->
+    <entry key='forward.enable'>true</entry>
+    <entry key='forward.json'>true</entry>
+</properties>
