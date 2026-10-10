@@ -12,3 +12,4 @@ mobile/.metadata
 mobile/*.iml
 .idea/
 .vscode/
+*.tsbuildinfo
